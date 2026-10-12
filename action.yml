@@ -1,0 +1,159 @@
+name: Behavior Diff for Agent Instructions
+author: Spacedock
+description: Compare recorded agent behavior before and after a PR instruction change, without an automatic verdict.
+branding:
+  icon: git-pull-request
+  color: purple
+inputs:
+  mode:
+    description: 'Required phase: prepare, run, or publish. Use separate jobs.'
+    required: true
+  github-token:
+    description: GitHub token. Read-only in prepare/run; pull-requests write and actions read in publish.
+    default: ${{ github.token }}
+  selection:
+    description: One frozen matrix entry from prepare, serialized with toJSON(matrix).
+    default: ''
+  pr:
+    description: PR number for manual dispatch; event PR identity otherwise.
+    default: ''
+  approved-sha:
+    description: Full current PR head SHA approved by the manual-dispatch actor.
+    default: ''
+  file:
+    description: Optional exact changed instruction path; blank selects all eligible files.
+    default: ''
+  trust-policy:
+    description: explicit requires manual/comment SHA approval; same-repository also permits trusted automatic PR events.
+    default: explicit
+  publication:
+    description: 'Explicit disclosure policy: none, artifact, or comment (artifact plus PR summary).'
+    default: none
+  trials:
+    description: Trials per side, 1 to 3. Each target runs twice this many trial sessions concurrently.
+    default: '3'
+  fast:
+    description: Set true for one trial per side. Comment fast is parsed from the approved command.
+    default: 'false'
+  max-files:
+    description: Maximum files per request, 1 to 10. Exceeding it fails before model calls.
+    default: '3'
+  model:
+    description: Claude trial model selector or exact model ID.
+    default: opus
+  extract-model:
+    description: Claude extraction model selector or exact model ID.
+    default: sonnet
+  draft-model:
+    description: Claude model for the separate purpose and scenario preparation calls.
+    default: opus
+  plugin-root:
+    description: Optional explicit plugin directory to relocate to .claude in both variants; existing .claude is a collision.
+    default: ''
+  timeout-minutes:
+    description: Execution deadline, 1 to 50 minutes. Caller job timeout must leave time for artifact collection.
+    default: '45'
+  retention-days:
+    description: Artifact retention, 1 to 30 days, also limited by repository policy.
+    default: '7'
+outputs:
+  status:
+    description: Preparation readiness, execution completeness, or publication outcome; never a behavior verdict.
+    value: ${{ steps.phase.outputs.status }}
+  matrix:
+    description: Frozen include matrix for run and publish jobs.
+    value: ${{ steps.phase.outputs.matrix }}
+  count:
+    description: Number of selected files.
+    value: ${{ steps.phase.outputs.count }}
+  head:
+    description: Exact tested PR head SHA.
+    value: ${{ steps.phase.outputs.head }}
+  pr:
+    description: Selected PR number.
+    value: ${{ steps.phase.outputs.pr }}
+  report-directory:
+    description: Private local directory containing only publication-eligible reports and result metadata.
+    value: ${{ steps.phase.outputs.report-directory }}
+  report-path:
+    description: Local report.html path when available.
+    value: ${{ steps.phase.outputs.report-path }}
+  result-path:
+    description: Local structured execution result path.
+    value: ${{ steps.phase.outputs.result-path }}
+  artifact-name:
+    description: Unique run-attempt-target artifact name.
+    value: ${{ steps.phase.outputs.artifact-name }}
+  artifact-url:
+    description: GitHub artifact download page, not public HTML hosting.
+    value: ${{ steps.upload.outputs.artifact-url }}
+  comment-url:
+    description: Created or updated PR comment URL.
+    value: ${{ steps.phase.outputs.comment-url }}
+  report-url:
+    description: Publisher-discovered report artifact URL.
+    value: ${{ steps.phase.outputs.report-url }}
+  report-status:
+    description: Publisher-observed execution completeness, separate from publication success.
+    value: ${{ steps.phase.outputs.report-status }}
+  run-url:
+    description: Workflow run containing the comparison.
+    value: ${{ steps.phase.outputs.run-url }}
+runs:
+  using: composite
+  steps:
+    - name: Select the Claude Code runtime
+      if: ${{ inputs.mode == 'run' }}
+      # actions/setup-node v4.4.0
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '22.23.2'
+    - name: Authorize and execute selected phase
+      id: phase
+      shell: bash
+      env:
+        BD_ACTION_PATH: ${{ github.action_path }}
+        BD_MODE: ${{ inputs.mode }}
+        BD_GITHUB_TOKEN: ${{ inputs.github-token }}
+        BD_SELECTION: ${{ inputs.selection }}
+        BD_PR: ${{ inputs.pr }}
+        BD_APPROVED_SHA: ${{ inputs.approved-sha }}
+        BD_FILE: ${{ inputs.file }}
+        BD_TRUST_POLICY: ${{ inputs.trust-policy }}
+        BD_PUBLICATION: ${{ inputs.publication }}
+        BD_TRIALS: ${{ inputs.trials }}
+        BD_FAST: ${{ inputs.fast }}
+        BD_MAX_FILES: ${{ inputs.max-files }}
+        BD_MODEL: ${{ inputs.model }}
+        BD_EXTRACT_MODEL: ${{ inputs.extract-model }}
+        BD_DRAFT_MODEL: ${{ inputs.draft-model }}
+        BD_PLUGIN_ROOT: ${{ inputs.plugin-root }}
+        BD_TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+        BD_RETENTION_DAYS: ${{ inputs.retention-days }}
+      run: python3 "$BD_ACTION_PATH/scripts/main.py"
+    - name: Upload only selected report files
+      id: upload
+      if: ${{ always() && inputs.mode == 'run' && inputs.publication != 'none' && steps.phase.outputs.report-directory != '' }}
+      # actions/upload-artifact v4.6.2; ZIP artifact, not hosted HTML.
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: ${{ steps.phase.outputs.artifact-name }}
+        path: ${{ steps.phase.outputs.report-directory }}
+        retention-days: ${{ inputs.retention-days }}
+        if-no-files-found: error
+        include-hidden-files: false
+    - name: Remove private execution scratch
+      if: ${{ always() && inputs.mode == 'run' && steps.phase.outputs.scratch-directory != '' }}
+      shell: bash
+      env:
+        BD_ACTION_PATH: ${{ github.action_path }}
+        BD_SCRATCH: ${{ steps.phase.outputs.scratch-directory }}
+      run: python3 "$BD_ACTION_PATH/scripts/cleanup.py"
+    - name: Surface incomplete execution after preserving evidence
+      if: ${{ always() && inputs.mode == 'run' }}
+      shell: bash
+      env:
+        BD_ACTION_PATH: ${{ github.action_path }}
+        BD_MODE: finalize
+        BD_STATUS: ${{ steps.phase.outputs.status }}
+      run: python3 "$BD_ACTION_PATH/scripts/main.py"
