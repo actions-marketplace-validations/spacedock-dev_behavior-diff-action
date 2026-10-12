@@ -27,6 +27,15 @@ The local implementation session verified:
 - Independent request/execution and publication-security reviews, with material
   findings fixed and re-reviewed to approval.
 
+The v0.4.5 dependency update pins core to
+`415aa72db6d3c764cdca32a642d21d1d034f2cc8`. Its runner, purpose validator,
+extractor interface and Markdown renderer are unchanged from v0.4.4; the
+release changes HTML Summary presentation. A local smoke through the actual
+v0.4.5 runner/validator/renderer completed both synthetic trials, retained the
+report with the expected `partial` status when extraction was unavailable,
+and passed the Action's four-section Summary projection. No paid model calls
+were made for this check.
+
 No live model authentication, GitHub artifact access, real comment upsert,
 candidate push, release or Marketplace publication has been verified here.
 Those still require the approved live smoke below.

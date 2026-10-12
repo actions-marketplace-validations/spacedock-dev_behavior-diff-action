@@ -1,223 +1,166 @@
 # Behavior Diff Action
 
-Compare recorded Claude behavior before and after a pull request changes
-`SKILL.md`, `AGENTS.md`, or `CLAUDE.md`. Each comparison changes **one instruction
-file**. The HTML report contains the evidence; the Action does not recommend
-merging or turn behavior differences into a pass/fail verdict.
+See how an instruction change affects your coding agent before you merge it.
+Behavior Diff runs the same task with the **Before** and **After** versions of
+`SKILL.md`, `AGENTS.md`, or `CLAUDE.md`, then gives reviewers an HTML evidence
+report and an optional pull request summary.
 
-**Unreleased.** Implementation is being prepared for GitHub Marketplace. The
-`@v1` examples become usable after a release; pin the audited release's full
-commit SHA before enabling credentials. A Marketplace listing and a live
-Action smoke are separate release gates, not implied by this repository.
+Use it when updating a skill, tightening a rule, or simplifying instructions
+and checking whether the behavior you care about survives. You review the
+recorded actions and answers; the Action does not make an automatic merge
+recommendation.
 
-## How to use it
+> **Pre-release:** no `v1` Action release is available yet. The workflow example
+> uses `@v1` for the planned release. Replace it with a reviewed commit SHA to
+> try the Action before release. Live GitHub/model validation is still pending.
 
-Use the [complete caller workflow](examples/behavior-diff.yml). It covers:
+## Example: ask before deleting files
 
-- Automatic runs on newly opened, same-repository instruction PRs, by explicit
-  trust-policy opt-in. Synchronize/reopened are supported if you add those events.
-- A maintainer's exact-SHA comment approval, including fork PRs:
-  `/behavior-diff <full-head-sha> ["path with spaces/SKILL.md"] [fast]`.
-- Manual dispatch with PR number, the reviewed full head SHA, and optional file
-  and fast mode.
+Suppose your cleanup skill currently says:
 
-The command is parsed as a whole, single-line command. No trailing prose,
-unsupported flags, abbreviated SHAs, or inherited approval after a push. Authors
-and original/rerun actors must currently have repository write, maintain, or
-admin permission. Association labels in the example are only a cheap trigger
-filter; the Action checks permissions through GitHub.
-
-Create a protected `behavior-diff` environment and place the caller's
-`CLAUDE_CODE_OAUTH_TOKEN` secret there. Scope the credential to the `run` step,
-not workflow-wide. Review the entire tested repository and PR context before
-approving: approval permits code execution, provider disclosure, and model cost.
-Do not use production credentials or sensitive fixtures.
-
-The example deliberately sets `publication: comment`. **In a public repository,
-this permits public disclosure of the report and PR summary.** Choose `artifact`
-for reports without comments, or `none` for local report files only. Keep the
-same publication choice across the three phases. With `none`, omit the publish
-job; local outputs last only as long as that runner.
-
-### Three phases, three jobs
-
-| Mode | Responsibility | Job permissions |
-| --- | --- | --- |
-| `prepare` | Authorize event, freeze head and merge-base, select targets | `contents: read`, `pull-requests: read` |
-| `run` | Reauthorize, stage one target, draft purpose/task, invoke core, upload selected reports | `contents: read`, `pull-requests: read`; model credential only here |
-| `publish` | Read the current invocation's artifacts; create/update bot-owned comments | `actions: read`, `pull-requests: write`, `contents: read`; no model credential |
-
-Use the workflow's `GITHUB_TOKEN`, not a personal write token. Do not combine
-these jobs. GitHub permissions and process isolation are job boundaries, not
-Action-step boundaries. Never check out PR code in a privileged publication
-job. No caller checkout is needed: the Action fetches exact commit objects in
-private scratch and never persists checkout credentials.
-
-Triggers, protected environments, job permissions, matrices, `max-parallel`,
-concurrency and job timeouts belong to the caller workflow. Use the example's
-shared per-repository/PR concurrency group with `cancel-in-progress: false` in
-**every** workflow publishing these comments. GitHub comment updates have no
-atomic compare-and-swap; without serialization, two publishers can race. The
-publisher also suppresses stale heads and older run/attempt results.
-
-## Inputs
-
-| Input | Default | Contract |
-| --- | --- | --- |
-| `mode` | required | `prepare`, `run`, or `publish` |
-| `github-token` | `github.token` | Read-only during preparation/execution; workflow token for publication |
-| `selection` | empty | In run/publish, `toJSON(matrix)` from prepare's frozen `matrix`; never PR-supplied JSON |
-| `pr` | event identity | Manual dispatch: canonical decimal number (no leading zeros); cannot override a different event PR |
-| `approved-sha` | empty | Manual dispatch: current lowercase 40-character head SHA; comment approval comes from the command |
-| `file` | all eligible | Exact changed instruction path; quote spaces in comment commands |
-| `trust-policy` | `explicit` | `same-repository` additionally permits automatic same-repository PR events |
-| `publication` | `none` | `none`, `artifact`, or `comment` (artifact plus PR summary) |
-| `trials` | `3` | 1–3 trials per side |
-| `fast` | `false` | One trial per side; comments obtain this from their `fast` argument |
-| `max-files` | `3` | 1–10; exceeding it fails before spending model calls, never silently truncates |
-| `model` | `opus` | Claude trial model; use an exact provider ID for model-version reproducibility |
-| `extract-model` | `sonnet` | Claude evidence extraction model |
-| `draft-model` | `opus` | Claude purpose/scenario drafting model |
-| `plugin-root` | empty | Explicit plugin directory to relocate to `.claude`; collisions fail closed |
-| `timeout-minutes` | `45` | 1–50, execution deadline; keep the job timeout longer for evidence upload |
-| `retention-days` | `7` | 1–30, subject to GitHub repository retention policy |
-
-Pass the same request/trial/trust inputs to prepare and run: execution checks the
-request again. A moved head or base invalidates the frozen selection before
-paid calls. Each matrix entry is bound to the repository, PR, head/base,
-merge-base, target, trial count, workflow run ID and attempt.
-
-### Outputs and status
-
-- Prepare: `matrix` (`{"include":[...]}`), `count`, `head`, `pr`, `status`.
-  `ready` means selected; `skipped` means an automatic PR has no eligible changes.
-  An explicit request with no eligible change fails visibly.
-- Run: `status` (`complete`, `partial`, `failed`), `report-directory`,
-  `report-path`, `result-path`, `artifact-name`, and, when uploaded, `artifact-url`.
-  Report paths are local to that job. `result.json` carries separate Before/After
-  completion counts, extraction availability, runner exit and report availability.
-- Publish: `status`, `report-status`, `comment-url`, `report-url`, `run-url`.
-  `published` means the comment was written, **not** that evidence was complete;
-  `stale`/`superseded` mean no older result replaced a newer one.
-
-Core's `REVIEW` grade means a trial produced a final answer, not correctness;
-`BLOCKED` means broken/incomplete evidence. `complete` is execution completeness,
-not proof of the rule's effectiveness. A runner exit of zero alone is insufficient.
-Incomplete execution fails the run step **after** available evidence is uploaded.
-Behavioral disagreement itself does not fail it. Upload failure fails visibly.
-A publisher can post an honest missing-artifact failure if execution was killed
-before it could write results. Cancellation can prevent even that publication;
-check the workflow run status.
-
-Artifacts contain only `report.html`, `report.md`, and `result.json`. No raw
-trial trees, environment dumps or credential files are intentionally uploaded.
-Reports themselves contain source, prompts, answers and recorded evidence.
-Artifacts are ZIP downloads behind GitHub's access rules, **not durable public
-HTML hosting**. Download and open `report.html` locally. Links expire with
-artifact retention or deletion. No Pages or gists are used.
-
-The PR comment deterministically projects the core Markdown Summary; there is
-no extra summarization model call. Counts, minority behavior, unchanged results
-and limitations stay together. If the full summary cannot fit safely, it is
-omitted with a report link rather than selectively truncated.
-
-## Comparison scope and repository layouts
-
-Before starts at the PR merge-base. After changes only the selected head file;
-other PR changes, including referenced files, are held fixed at the base.
-Multiple targets get independent comparisons, not a combined PR experiment.
-Git renames use the old path's bytes as Before and remove the stale original
-location. This normalizes layout for comparison; it does not test relocation
-behavior as a second independent change.
-
-Cross-directory skill renames must move the whole skill directory to a location
-absent at the merge-base. Partial moves or existing destination layouts fail
-before drafting rather than leaving relative references broken. Pure renames
-without a content edit and empty-file additions have no instruction-content
-difference and fail before model calls.
-
-For a new file, Before is an **empty regular file, not true absence**. Do not use
-this boundary to conclude how an agent behaves when a file is missing.
-Deletions are not comparisons. Symlink targets, unsafe paths and unsupported
-layouts fail rather than being silently transformed.
-Repository attributes that omit or rewrite the Before target during
-`git archive` also fail before model calls.
-
-Project skills already in `.claude/skills/` remain there. For a plugin skill
-such as `plugin/skills/review/SKILL.md`, set `plugin-root: plugin` explicitly.
-The base plugin's skills, agents and references move together to `.claude`;
-the original plugin directory is removed in both snapshots so agents cannot
-read a stale competing copy. An existing `.claude` is a collision, not a merge
-policy. Relative references within that plugin remain relative; dependencies
-outside the plugin and changes to sibling files are not automatically tested.
-The Action does not invent a core `--plugin-dir` trial flag.
-
-Claude does not natively discover every `AGENTS.md` or arbitrary skill location.
-Scenario preparation must make the target available to the trial without
-revealing expected behavior. Read the report to verify whether the trial
-actually reached and read the instruction; visibility is not proof of use.
-
-Purpose is frozen in a separate, tool-free model call before drafting the
-scenario. It is validated by core's `purpose.py`; invalid purpose fails closed
-without trial spending. The scenario drafting call never receives that purpose
-file. Purpose/task scratch is outside the comparison repository. `null` purpose
-is allowed and core labels diff-derived intent as inference. PR text is context,
-not trustworthy evidence of author history or a higher-priority instruction.
-
-## Runtime, credentials and cost
-
-The implementation targets **GitHub.com hosted `ubuntu-24.04` and Claude Code**.
-macOS, Windows, self-hosted runners, GitHub Enterprise Server, other hosts,
-API-key authentication, cloud providers and OIDC are not advertised as tested
-Action configurations. Node 22.23.2 is selected for the pinned CLI's Node >=22
-requirement; Ubuntu supplies Bash, Python 3, Git and jq.
-
-| Dependency | Pin |
-| --- | --- |
-| Behavior Diff core | v0.4.4, `90a3f346b8a78be2360b43522c518f76e33ddfe4` |
-| Claude Code | `@anthropic-ai/claude-code@2.1.296` |
-| upload-artifact | v4.6.2, immutable SHA in `action.yml` |
-| setup-node | v4.4.0, immutable SHA in `action.yml` |
-
-Action releases and core versions are separate. Core is fetched by immutable
-commit, never mutable `main`; the Action reuses its validator, trial launcher,
-extractor and renderer rather than maintaining a second comparison engine.
-The repository is Apache-2.0 licensed. The fetched core retains its own license
-and notices. No internal PoC content or reports are bundled as examples.
-
-The internal PoC verified Claude subscription-token authentication. Anthropic's
-[current GitHub Actions guidance](https://code.claude.com/docs/en/github-actions)
-also documents subscription tokens generated with `claude setup-token`. This
-is not a guarantee about every account, plan, token lifetime or future provider
-policy. Confirm your account's automation permission and data/cost policy;
-use caller-owned credentials. Do not reuse a developer's organization secret
-name or assume the token is a team-wide service credential. The same guidance
-recommends API keys for organization-wide shared credentials; API-key support
-is not claimed by this Action implementation.
-
-For each target, default execution makes two preparation calls, six concurrent
-trial sessions, and one extraction call. Fast mode reduces trial sessions to
-two; it does not skip preparation or extraction. There are no wrapper-paid
-retries. A session can itself use multiple model turns. The example serializes
-targets with `max-parallel: 1`; increasing it multiplies concurrent sessions.
-Timeouts and trial counts are bounds on orchestration, **not a dollar cap**.
-Use provider spending limits and a reviewed workflow. Do not enable automatic
-runs on every push without considering the cost.
-
-## Security and release readiness
-
-Read [SECURITY.md](SECURITY.md) before enabling model credentials. Separate
-copies, a tool allowlist and stripped child environments are not a sandbox.
-Approving a repository grants its instructions and executable content access
-to an ephemeral runner with model credentials and network access.
-
-Run the secret-free regression suite with:
-
-```sh
-python3 -m unittest discover -s tests -v
+```markdown
+Remove generated files that are no longer needed.
 ```
 
-Normal CI uses synthetic fixtures only and never calls a paid model. See
-[RELEASING.md](RELEASING.md) for the controlled live-smoke and Marketplace gates.
-Do not equate a local synthetic run, a tagged release, or root `action.yml` with
-verified Marketplace publication.
+Your PR changes that instruction to:
+
+```diff
+-Remove generated files that are no longer needed.
++Before deleting generated files, list what you intend to remove and ask
++the user to approve the deletion.
+```
+
+A useful scenario would be:
+
+> The build is failing because of stale generated files. Investigate the
+> problem and help me get the build working again.
+
+The task gives the agent a reason to consider cleanup without telling it to
+ask for approval. Behavior Diff prepares a scenario from the selected change
+and runs fresh trials on both versions. In the report, you can check:
+
+- Did Before delete files, propose a deletion, or take another approach?
+- Did After ask for approval before executing a deletion?
+- Did every trial reach the cleanup decision, or only some of them?
+- Did anything else change, such as whether the agent investigated the failure?
+
+**This is an illustrative case, not a measured result.** The report may show a
+consistent change, mixed behavior, unchanged behavior, or insufficient evidence.
+A proposed deletion and an executed deletion are different findings.
+
+## What you get
+
+With `publication: comment`, the Action creates or updates one bot-owned comment
+per instruction file. It includes the tested Before/After versions, trial
+completion counts, a summary of the evidence and a link to the full report.
+
+Download the report artifact and open `report.html` to inspect the instruction
+diff, behavior comparisons, recorded actions and final answers. Artifacts are
+ZIP downloads subject to GitHub access rules and retention, not hosted HTML
+pages.
+
+Each comparison changes one instruction file while holding other repository
+content fixed. Multiple changed instruction files get separate comparisons.
+See [comparison scope and repository layouts](docs/comparison-scope.md) for
+additions, renames, plugin skills and other comparison boundaries.
+
+## Get started
+
+The Action targets GitHub.com hosted **Ubuntu 24.04** runners and **Claude Code**.
+It uses a caller-provided `CLAUDE_CODE_OAUTH_TOKEN`. Other agent hosts, API-key
+authentication, self-hosted runners and GitHub Enterprise Server are not
+advertised as tested configurations.
+
+1. Copy the [complete workflow](examples/behavior-diff.yml) into your repository
+   as `.github/workflows/behavior-diff.yml`. Replace each Action version reference
+   with the same reviewed full commit SHA.
+2. Create a protected GitHub environment named `behavior-diff`. Add your Claude
+   subscription token as its `CLAUDE_CODE_OAUTH_TOKEN` secret. Anthropic documents
+   token setup in its [GitHub Actions guide](https://code.claude.com/docs/en/github-actions).
+   Confirm your account permits this use.
+3. Choose where results may be published. The example uses `publication: comment`.
+   **In a public repository, this permits public disclosure of the report and
+   summary.** Use `artifact` for reports without comments, or `none` for local
+   report files only. Keep this choice consistent across the workflow; omit the
+   publish job when using `none`.
+4. Open an instruction-change PR, or approve an existing PR using one of the
+   methods below. Review the repository and PR context before allowing execution.
+
+Keep the example's three jobs separate. Preparation and model execution use
+read-only GitHub permissions; only publication gets PR write permission, and
+that job receives no model credential. Use the workflow's `GITHUB_TOKEN`, not a
+personal write token. No checkout step is needed.
+
+Preserve the example's concurrency settings across workflows publishing these
+comments so older runs cannot race to replace newer results. For plugin skills
+outside `.claude/skills/`, read the [layout guide](docs/comparison-scope.md)
+before configuring `plugin-root`.
+
+### When comparisons run
+
+The example workflow supports:
+
+- **Automatic:** newly opened, same-repository instruction PRs, using the explicit
+  `trust-policy: same-repository` opt-in. Fork PRs require approval.
+- **PR comment:** a maintainer approves the exact current head commit:
+
+  ```text
+  /behavior-diff <full-head-sha> ["path with spaces/SKILL.md"] [fast]
+  ```
+
+  Replace `<full-head-sha>` with the actual 40-character SHA. Brackets indicate
+  optional arguments; do not type the brackets. Include `fast` for one trial per
+  side. Use a single-line comment without trailing prose.
+- **Manual:** choose **Actions → Behavior Diff → Run workflow**, then provide the
+  PR number, reviewed full head SHA and optional file/fast settings.
+
+Request authors and original/rerun actors must currently have repository write,
+maintain or admin permission. A new push needs a new SHA approval. Do not use
+`pull_request_target` to execute PR code; the Action rejects it.
+
+## Cost and privacy
+
+By default, each selected file uses two preparation calls, six trial sessions
+(three per side) and one extraction call. Fast mode reduces trials to two but
+keeps preparation and extraction. Trial sessions can use multiple model turns;
+timeouts and trial counts are **not a dollar cap**. Set provider spending limits
+and keep the workflow's file count, concurrency and runtime limits appropriate
+for your repository.
+
+The default models are Opus for preparation/trials and Sonnet for extraction.
+You can configure these separately. There is no additional model call to write
+the PR comment.
+
+Reports can contain code, instructions, prompts, answers and captured tool
+returns. Repository content also goes to the configured model provider. Only
+run comparisons on content you have approved for that disclosure.
+
+**This Action is not an untrusted-code sandbox.** Agents can execute programs
+and access the network. Use ephemeral runners, keep unrelated secrets out of
+the execution job, and read [SECURITY.md](SECURITY.md) before enabling credentials.
+
+## Reading the result
+
+`complete` means execution and extraction completed; it does not mean the rule
+is correct. `partial` means a report is available but some evidence is missing.
+`failed` means no usable report was produced. Available evidence is uploaded
+before incomplete execution fails the run step.
+
+Unchanged behavior is not a failed test. Check whether the trials reached the
+situation the instruction governs, and distinguish stated plans from completed
+actions. The report preserves trial counts and evidence limitations so you can
+make that judgment.
+
+## Documentation
+
+- [Configuration reference](docs/configuration.md): all inputs, outputs, job
+  permissions, dependency pins and runtime details.
+- [Comparison scope and repository layouts](docs/comparison-scope.md): what is
+  held fixed and how instruction files are staged.
+- [Security guidance](SECURITY.md): approval, credentials and disclosure risks.
+- [Maintainer release guide](RELEASING.md): verification and publication checklist.
+
+## License
+
+[Apache-2.0](LICENSE). This Action uses the
+[Behavior Diff core](https://github.com/spacedock-dev/behavior-diff).

@@ -1,3 +1,6 @@
 __pycache__/
 *.py[cod]
 .venv/
+
+# Local implementation handoff; not for publication.
+/HANDOFF.md
