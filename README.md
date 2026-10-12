@@ -1,18 +1,17 @@
 # Behavior Diff Action
 
-See how an instruction change affects your coding agent before you merge it.
 Behavior Diff runs the same task with the **Before** and **After** versions of
-`SKILL.md`, `AGENTS.md`, or `CLAUDE.md`, then gives reviewers an HTML evidence
-report and an optional pull request summary.
+`SKILL.md`, `AGENTS.md`, or `CLAUDE.md`. You get an HTML report of the agent's
+recorded actions and answers, plus an optional pull request summary.
 
-Use it when updating a skill, tightening a rule, or simplifying instructions
-and checking whether the behavior you care about survives. You review the
-recorded actions and answers; the Action does not make an automatic merge
-recommendation.
+Use it to check whether a skill or rule edit changes behavior as intended.
+It also helps you check that simplifying instructions preserves behavior you
+want to keep. You decide what the evidence means for your PR; the Action does
+not make an automatic merge recommendation.
 
-> **Pre-release:** no `v1` Action release is available yet. The workflow example
-> uses `@v1` for the planned release. Replace it with a reviewed commit SHA to
-> try the Action before release. Live GitHub/model validation is still pending.
+> **Pre-release:** the `v1` Action release is not available yet. The workflow
+> example uses `@v1`; replace it with a reviewed commit SHA to try the Action
+> before release. Live validation with GitHub and a model provider is still pending.
 
 ## Example: ask before deleting files
 
@@ -30,23 +29,23 @@ Your PR changes that instruction to:
 +the user to approve the deletion.
 ```
 
-A useful scenario would be:
+A task for this comparison could be:
 
 > The build is failing because of stale generated files. Investigate the
 > problem and help me get the build working again.
 
-The task gives the agent a reason to consider cleanup without telling it to
+This task gives the agent a reason to consider cleanup without telling it to
 ask for approval. Behavior Diff prepares a scenario from the selected change
-and runs fresh trials on both versions. In the report, you can check:
+and runs fresh trials with each version. Use the report to answer:
 
 - Did Before delete files, propose a deletion, or take another approach?
 - Did After ask for approval before executing a deletion?
 - Did every trial reach the cleanup decision, or only some of them?
 - Did anything else change, such as whether the agent investigated the failure?
 
-**This is an illustrative case, not a measured result.** The report may show a
-consistent change, mixed behavior, unchanged behavior, or insufficient evidence.
-A proposed deletion and an executed deletion are different findings.
+This example is illustrative; it is not a measured result. An actual report
+may show a consistent change, mixed or unchanged behavior, or too little
+evidence to draw a conclusion. Proposing a deletion differs from executing one.
 
 ## What you get
 
@@ -55,9 +54,9 @@ per instruction file. It includes the tested Before/After versions, trial
 completion counts, a summary of the evidence and a link to the full report.
 
 Download the report artifact and open `report.html` to inspect the instruction
-diff, behavior comparisons, recorded actions and final answers. Artifacts are
-ZIP downloads subject to GitHub access rules and retention, not hosted HTML
-pages.
+diff, behavior comparisons, recorded actions and final answers. GitHub stores
+the report as a ZIP download, subject to repository access rules and artifact
+retention. It does not host the HTML as a web page.
 
 Each comparison changes one instruction file while holding other repository
 content fixed. Multiple changed instruction files get separate comparisons.
@@ -66,10 +65,10 @@ additions, renames, plugin skills and other comparison boundaries.
 
 ## Get started
 
-The Action targets GitHub.com hosted **Ubuntu 24.04** runners and **Claude Code**.
-It uses a caller-provided `CLAUDE_CODE_OAUTH_TOKEN`. Other agent hosts, API-key
-authentication, self-hosted runners and GitHub Enterprise Server are not
-advertised as tested configurations.
+The Action targets GitHub.com hosted Ubuntu 24.04 runners and Claude Code,
+using your `CLAUDE_CODE_OAUTH_TOKEN`. Other agent hosts, API-key authentication,
+self-hosted runners and GitHub Enterprise Server have not been verified for
+this Action.
 
 1. Copy the [complete workflow](examples/behavior-diff.yml) into your repository
    as `.github/workflows/behavior-diff.yml`. Replace each Action version reference
@@ -78,31 +77,31 @@ advertised as tested configurations.
    subscription token as its `CLAUDE_CODE_OAUTH_TOKEN` secret. Anthropic documents
    token setup in its [GitHub Actions guide](https://code.claude.com/docs/en/github-actions).
    Confirm your account permits this use.
-3. Choose where results may be published. The example uses `publication: comment`.
-   **In a public repository, this permits public disclosure of the report and
-   summary.** Use `artifact` for reports without comments, or `none` for local
-   report files only. Keep this choice consistent across the workflow; omit the
-   publish job when using `none`.
-4. Open an instruction-change PR, or approve an existing PR using one of the
-   methods below. Review the repository and PR context before allowing execution.
+3. Choose where to publish results. The example uses `publication: comment`.
+   **On a public repository, this allows the report and summary to be public.**
+   Use `artifact` for reports without comments, or `none` to keep report files
+   local to the runner. Use the same setting throughout the workflow and omit
+   the publish job when using `none`.
+4. Open an instruction-change PR or approve an existing PR as described below.
+   Review the repository and PR context before allowing execution.
 
-Keep the example's three jobs separate. Preparation and model execution use
-read-only GitHub permissions; only publication gets PR write permission, and
-that job receives no model credential. Use the workflow's `GITHUB_TOKEN`, not a
-personal write token. No checkout step is needed.
+Keep the example's three jobs separate. Preparation and model execution need
+read-only GitHub permissions. The publication job gets PR write permission
+but no model credential. Use the workflow's `GITHUB_TOKEN` rather than a
+personal write token. You do not need a checkout step.
 
-Preserve the example's concurrency settings across workflows publishing these
-comments so older runs cannot race to replace newer results. For plugin skills
+Keep the example's concurrency settings consistent across workflows that publish
+these comments, so an older run cannot overwrite newer results. For plugin skills
 outside `.claude/skills/`, read the [layout guide](docs/comparison-scope.md)
 before configuring `plugin-root`.
 
 ### When comparisons run
 
-The example workflow supports:
+You can start a comparison in three ways:
 
-- **Automatic:** newly opened, same-repository instruction PRs, using the explicit
-  `trust-policy: same-repository` opt-in. Fork PRs require approval.
-- **PR comment:** a maintainer approves the exact current head commit:
+- Automatically when a same-repository instruction PR is opened, if you enable
+  `trust-policy: same-repository`. Fork PRs require approval.
+- With a PR comment approving the exact current head commit:
 
   ```text
   /behavior-diff <full-head-sha> ["path with spaces/SKILL.md"] [fast]
@@ -111,29 +110,29 @@ The example workflow supports:
   Replace `<full-head-sha>` with the actual 40-character SHA. Brackets indicate
   optional arguments; do not type the brackets. Include `fast` for one trial per
   side. Use a single-line comment without trailing prose.
-- **Manual:** choose **Actions → Behavior Diff → Run workflow**, then provide the
-  PR number, reviewed full head SHA and optional file/fast settings.
+- Manually: choose **Actions → Behavior Diff → Run workflow** and enter the PR
+  number and reviewed full head SHA. File and fast-mode settings are optional.
 
-Request authors and original/rerun actors must currently have repository write,
-maintain or admin permission. A new push needs a new SHA approval. Do not use
+The request author, original workflow actor and anyone rerunning it must
+currently have repository write, maintain or admin permission. After a new push,
+approve the new head SHA. Do not use
 `pull_request_target` to execute PR code; the Action rejects it.
 
 ## Cost and privacy
 
-By default, each selected file uses two preparation calls, six trial sessions
-(three per side) and one extraction call. Fast mode reduces trials to two but
-keeps preparation and extraction. Trial sessions can use multiple model turns;
-timeouts and trial counts are **not a dollar cap**. Set provider spending limits
-and keep the workflow's file count, concurrency and runtime limits appropriate
-for your repository.
+Each selected file uses two preparation calls, six trial sessions (three per
+side) and one extraction call by default. Fast mode reduces trials to two;
+preparation and extraction still run. A trial session can use multiple model
+turns, so timeouts and trial counts do not cap spending. Set provider spending
+limits as well as limits on the workflow's file count, concurrency and runtime.
 
-The default models are Opus for preparation/trials and Sonnet for extraction.
-You can configure these separately. There is no additional model call to write
-the PR comment.
+Preparation and trials use Opus by default; extraction uses Sonnet. You can
+configure the models separately. Writing the PR comment does not require
+another model call.
 
-Reports can contain code, instructions, prompts, answers and captured tool
-returns. Repository content also goes to the configured model provider. Only
-run comparisons on content you have approved for that disclosure.
+Reports can include code, instructions, prompts, answers and recorded tool
+output. Repository content also goes to the configured model provider. Run
+comparisons only on content you have approved for that disclosure.
 
 **This Action is not an untrusted-code sandbox.** Agents can execute programs
 and access the network. Use ephemeral runners, keep unrelated secrets out of
@@ -141,15 +140,15 @@ the execution job, and read [SECURITY.md](SECURITY.md) before enabling credentia
 
 ## Reading the result
 
-`complete` means execution and extraction completed; it does not mean the rule
-is correct. `partial` means a report is available but some evidence is missing.
-`failed` means no usable report was produced. Available evidence is uploaded
-before incomplete execution fails the run step.
+`complete` means execution and extraction finished, not that the rule is
+correct. A `partial` result has a report with some evidence missing; `failed`
+means no usable report was produced. The Action uploads available evidence
+before failing the run step for incomplete execution.
 
 Unchanged behavior is not a failed test. Check whether the trials reached the
-situation the instruction governs, and distinguish stated plans from completed
-actions. The report preserves trial counts and evidence limitations so you can
-make that judgment.
+situation covered by the instruction, and whether the agent acted or only
+described a plan. Use the trial counts and evidence limitations in the report
+when interpreting the result.
 
 ## Documentation
 
