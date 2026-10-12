@@ -36,9 +36,17 @@ report with the expected `partial` status when extraction was unavailable,
 and passed the Action's four-section Summary projection. No paid model calls
 were made for this check.
 
-No live model authentication, GitHub artifact access, real comment upsert,
-candidate push, release or Marketplace publication has been verified here.
-Those still require the approved live smoke below.
+Live model authentication, GitHub artifact access and real comment upserts remain
+unverified. These require the approved live smoke below before a stable release
+or Marketplace publication.
+
+## v0.1.0 beta policy
+
+The initial `v0.1.0` release is a GitHub prerelease for controlled evaluation,
+authorized before the live smoke is complete. Its README and release notes must
+disclose that limitation. Publish the exact version tag without creating a
+stable `v1` alias or claiming Marketplace availability. Passing deterministic CI
+does not replace the outstanding live checks.
 
 
 ## Before a release

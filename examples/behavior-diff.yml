@@ -1,5 +1,5 @@
-# Copy to .github/workflows/behavior-diff.yml after the first Action release.
-# Replace @v1 with the audited release's full commit SHA before enabling secrets.
+# Copy to .github/workflows/behavior-diff.yml for controlled beta evaluation.
+# Replace @v0.1.0 with the reviewed release's full commit SHA before enabling secrets.
 # This example explicitly permits PUBLIC disclosure in a public repository.
 name: Behavior Diff
 on:
@@ -48,7 +48,7 @@ jobs:
       matrix: ${{ steps.prepare.outputs.matrix }}
       status: ${{ steps.prepare.outputs.status }}
     steps:
-      - uses: spacedock-dev/behavior-diff-action@v1
+      - uses: spacedock-dev/behavior-diff-action@v0.1.0
         id: prepare
         with:
           mode: prepare
@@ -74,7 +74,7 @@ jobs:
       max-parallel: 1
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
-      - uses: spacedock-dev/behavior-diff-action@v1
+      - uses: spacedock-dev/behavior-diff-action@v0.1.0
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         with:
@@ -102,7 +102,7 @@ jobs:
       max-parallel: 1
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
-      - uses: spacedock-dev/behavior-diff-action@v1
+      - uses: spacedock-dev/behavior-diff-action@v0.1.0
         with:
           mode: publish
           selection: ${{ toJSON(matrix) }}

@@ -9,9 +9,10 @@ It also helps you check that simplifying instructions preserves behavior you
 want to keep. You decide what the evidence means for your PR; the Action does
 not make an automatic merge recommendation.
 
-> **Pre-release:** the `v1` Action release is not available yet. The workflow
-> example uses `@v1`; replace it with a reviewed commit SHA to try the Action
-> before release. Live validation with GitHub and a model provider is still pending.
+> **Beta: [v0.1.0](https://github.com/spacedock-dev/behavior-diff-action/releases/tag/v0.1.0).**
+> The workflow example uses `@v0.1.0`. Pin its reviewed full commit SHA before
+> enabling credentials. Live validation with GitHub and a model provider is
+> still pending; use this beta for controlled evaluation.
 
 ## Example: ask before deleting files
 
