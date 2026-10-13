@@ -14,6 +14,9 @@ inputs:
   selection:
     description: One frozen matrix entry from prepare, serialized with toJSON(matrix).
     default: ''
+  core-ref:
+    description: Optional reviewed lowercase 40-character Behavior Diff core commit SHA. Prepare freezes it; run/publish inherit it from selection. Empty uses the release pin.
+    default: ''
   pr:
     description: PR number for manual dispatch; event PR identity otherwise.
     default: ''
@@ -116,6 +119,7 @@ runs:
         BD_MODE: ${{ inputs.mode }}
         BD_GITHUB_TOKEN: ${{ inputs.github-token }}
         BD_SELECTION: ${{ inputs.selection }}
+        BD_CORE_REF: ${{ inputs.core-ref }}
         BD_PR: ${{ inputs.pr }}
         BD_APPROVED_SHA: ${{ inputs.approved-sha }}
         BD_FILE: ${{ inputs.file }}

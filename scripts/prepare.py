@@ -6,7 +6,7 @@ import shlex
 import shutil
 import urllib.parse
 
-from common import (fetch_repository, git, input_value, integer, private_directory,
+from common import (CORE_REVISION, fetch_repository, git, input_value, integer, private_directory,
                     repository_name, safe_path, sha, target_id, validate_selection)
 
 
@@ -151,6 +151,7 @@ def regular_blob(directory, commit, path, deadline=None):
 
 
 def prepare(api):
+    core_revision = sha(input_value("core-ref") or CORE_REVISION)
     pr, requested, trials = resolve_request(api)
     repository = os.environ["GITHUB_REPOSITORY"]
     head, base = pr["head"]["sha"], pr["base"]["sha"]
@@ -172,7 +173,7 @@ def prepare(api):
             regular_blob(repo, head, entry["path"])
             if entry["change"] != "A":
                 regular_blob(repo, merge_base, entry["previous_path"])
-            selection = dict(schema=1, repository=repository, pr=pr["number"], head=head,
+            selection = dict(schema=2, core_revision=core_revision, repository=repository, pr=pr["number"], head=head,
                 base=base, merge_base=merge_base, trials=trials, id=target_id(entry["path"]),
                 run_id=os.environ["GITHUB_RUN_ID"], run_attempt=os.environ["GITHUB_RUN_ATTEMPT"], **entry)
             selections.append(validate_selection(selection))

@@ -144,6 +144,13 @@ comparisons only on content you have approved for that disclosure.
 and access the network. Use ephemeral runners, keep unrelated secrets out of
 the execution job, and read [SECURITY.md](SECURITY.md) before enabling credentials.
 
+For core development and dogfooding, set the optional
+[`core-ref` input](docs/configuration.md#testing-a-different-core-revision) in
+prepare to a reviewed full commit SHA. Run and publish inherit the frozen
+revision. Omit it to keep the release's default core pin. An override runs
+different executable code with model credentials; review it separately from
+the instruction change being compared.
+
 ## Reading the result
 
 `complete` means execution and extraction finished, not that the rule is

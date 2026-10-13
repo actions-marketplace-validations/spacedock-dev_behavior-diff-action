@@ -59,12 +59,15 @@ def target_id(path):
 
 def validate_selection(value):
     fields = {"schema", "repository", "pr", "head", "base", "merge_base", "path",
-              "previous_path", "change", "trials", "id", "run_id", "run_attempt"}
-    if not isinstance(value, dict) or set(value) != fields or value["schema"] != 1:
+              "previous_path", "change", "trials", "id", "run_id", "run_attempt", "core_revision"}
+    if not isinstance(value, dict) or set(value) != fields or type(value["schema"]) is not int or value["schema"] != 2:
         raise ValueError("Invalid selection schema")
     repository_name(value["repository"])
-    for key in ("head", "base", "merge_base"):
+    for key in ("head", "base", "merge_base", "core_revision"):
         sha(value[key])
+    requested_core = input_value("core-ref")
+    if requested_core and sha(requested_core) != value["core_revision"]:
+        raise ValueError("core-ref does not match the prepared selection")
     for key in ("path", "previous_path"):
         safe_path(value[key])
     if PurePosixPath(value["path"]).name not in {"SKILL.md", "AGENTS.md", "CLAUDE.md"}:

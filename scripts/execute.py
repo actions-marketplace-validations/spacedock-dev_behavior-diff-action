@@ -28,7 +28,7 @@ import tempfile
 import time
 from typing import NamedTuple
 
-from common import (CLAUDE_VERSION, CORE_REVISION, clean_env, fetch_repository, git,
+from common import (CLAUDE_VERSION, clean_env, fetch_repository, git,
                     input_value, integer, private_directory, run_command, safe_path, sha,
                     validate_selection, write_private)
 from prepare import changed_files, regular_blob, resolve_request
@@ -436,8 +436,9 @@ def _remaining(deadline, cap):
     return min(cap, left)
 
 
-def install_dependencies(work, deadline):
-    """Install pinned Claude Code into a private prefix and clone the pinned core."""
+def install_dependencies(work, deadline, core_revision):
+    """Install pinned Claude Code and the exact core frozen during preparation."""
+    sha(core_revision)
     prefix = work / "deps" / "claude"
     prefix.mkdir(parents=True, mode=0o700)
     (work / "deps" / "home").mkdir(mode=0o700)
@@ -468,9 +469,9 @@ def install_dependencies(work, deadline):
     core = work / "deps" / "core"
     core.mkdir(mode=0o700)
     _git(["init", "-q"], core, deadline)
-    _git(["fetch", "-q", "--depth", "1", "--no-tags", "--", CORE_URL, CORE_REVISION], core, deadline, 600)
-    _git(["-c", "advice.detachedHead=false", "checkout", "-q", "--detach", CORE_REVISION], core, deadline)
-    if _git(["rev-parse", "HEAD"], core, deadline).decode().strip() != CORE_REVISION:
+    _git(["fetch", "-q", "--depth", "1", "--no-tags", "--", CORE_URL, core_revision], core, deadline, 600)
+    _git(["-c", "advice.detachedHead=false", "checkout", "-q", "--detach", core_revision], core, deadline)
+    if _git(["rev-parse", "HEAD"], core, deadline).decode().strip() != core_revision:
         raise Failure("dependencies")
     return Dependencies(claude, core / CORE_SCRIPTS)
 
@@ -801,7 +802,7 @@ def _compare(selection, api, options, work, deadline, state, token):
     paths = project_paths(project, deadline)
 
     state["phase"] = "dependencies"
-    dependencies = install_dependencies(work, deadline)
+    dependencies = install_dependencies(work, deadline, selection["core_revision"])
     # Drafts get their own HOME, removed before trials, so trial sessions never load draft state.
     draft_env = model_env(work, dependencies, token, work / "draft-home")
     env = model_env(work, dependencies, token, work / "home")

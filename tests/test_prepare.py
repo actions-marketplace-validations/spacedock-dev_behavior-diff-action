@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from common import clean_env, git, safe_path, target_id, validate_selection
+from common import CORE_REVISION, clean_env, git, safe_path, target_id, validate_selection
 from prepare import authorize, changed_files, parse_command, prepare, regular_blob
 
 
@@ -40,7 +40,7 @@ class PreparationTests(unittest.TestCase):
             "GITHUB_ACTOR": "maintainer", "GITHUB_TRIGGERING_ACTOR": "maintainer",
             "GITHUB_EVENT_NAME": "workflow_dispatch", "BD_PR": "7", "BD_TRIALS": "3",
             "BD_FAST": "false", "BD_TRUST_POLICY": "explicit", "BD_PUBLICATION": "none",
-            "BD_FILE": "", "BD_MAX_FILES": "3", "RUNNER_TEMP": str(self.root),
+            "BD_FILE": "", "BD_MAX_FILES": "3", "BD_CORE_REF": "", "RUNNER_TEMP": str(self.root),
             "GITHUB_WORKSPACE": str(self.repo), "BD_GITHUB_TOKEN": "synthetic-token",
         })
         self.env.start()
@@ -160,10 +160,39 @@ class PreparationTests(unittest.TestCase):
         selection = result["matrix"]["include"][0]
         self.assertEqual((result["status"], result["count"], selection["merge_base"]), ("ready", 1, self.base))
         self.assertEqual(selection["path"], "CLAUDE.md")
+        self.assertEqual(selection["core_revision"], CORE_REVISION)
         self.assertEqual(list(self.root.glob("behavior-diff-prepare-*")), [])
         with patch.dict(os.environ, {"GITHUB_RUN_ATTEMPT": "2"}):
             with self.assertRaises(ValueError):
                 validate_selection(selection)
+
+    def test_core_ref_is_frozen_and_inherited_without_repeating_input(self):
+        revision = "d" * 40
+        with patch("prepare.fetch_repository", self.fetch), patch.dict(os.environ, {"BD_CORE_REF": revision}):
+            selection = prepare(API(self.pr))["matrix"]["include"][0]
+        self.assertEqual(validate_selection(selection)["core_revision"], revision)
+        with patch.dict(os.environ, {"BD_CORE_REF": CORE_REVISION}):
+            with self.assertRaisesRegex(ValueError, "core-ref does not match"):
+                validate_selection(selection)
+
+    def test_core_ref_rejects_mutable_and_malformed_refs_before_fetch(self):
+        for revision in ("main", "v0.4.6", "abcdef0", "A" * 40, "a" * 64,
+                         "a" * 40 + "\n", " " + "a" * 40, "--upload-pack=bad"):
+            with self.subTest(revision=revision), patch.dict(os.environ, {"BD_CORE_REF": revision}):
+                with patch("prepare.fetch_repository") as fetch, self.assertRaises(ValueError):
+                    prepare(API(self.pr))
+                fetch.assert_not_called()
+
+    def test_selection_requires_valid_frozen_core(self):
+        with patch("prepare.fetch_repository", self.fetch):
+            selection = prepare(API(self.pr))["matrix"]["include"][0]
+        for revision in (None, "", "main", 123, "d" * 39):
+            with self.subTest(revision=revision), self.assertRaises(ValueError):
+                validate_selection({**selection, "core_revision": revision})
+        legacy = {key: value for key, value in selection.items() if key != "core_revision"}
+        legacy["schema"] = 1
+        with self.assertRaisesRegex(ValueError, "selection schema"):
+            validate_selection(legacy)
 
     def test_deletion_only_auto_skips_but_explicit_fails(self):
         (self.repo / "CLAUDE.md").unlink()
