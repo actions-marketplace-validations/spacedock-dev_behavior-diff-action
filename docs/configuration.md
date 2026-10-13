@@ -7,7 +7,7 @@
 
 | Mode | Responsibility | Job permissions |
 | --- | --- | --- |
-| `prepare` | Authorize event, freeze head and merge-base, select targets | `contents: read`, `pull-requests: read` |
+| `prepare` | Authorize event, freeze core/head/merge-base revisions, select targets | `contents: read`, `pull-requests: read` |
 | `run` | Reauthorize, stage one target, draft purpose/task, invoke core, upload selected reports | `contents: read`, `pull-requests: read`; model credential only here |
 | `publish` | Read the current invocation's artifacts; create/update bot-owned comments | `actions: read`, `pull-requests: write`, `contents: read`; no model credential |
 
@@ -31,6 +31,7 @@ publisher also suppresses stale heads and older run/attempt results.
 | `mode` | required | `prepare`, `run`, or `publish` |
 | `github-token` | `github.token` | Read-only during preparation/execution; workflow token for publication |
 | `selection` | empty | In run/publish, `toJSON(matrix)` from prepare's frozen `matrix`; never PR-supplied JSON |
+| `core-ref` | release core pin | Optional reviewed lowercase 40-character commit SHA from `spacedock-dev/behavior-diff`; set in prepare, inherited through selection in run/publish |
 | `pr` | event identity | Manual dispatch: canonical decimal number (no leading zeros); cannot override a different event PR |
 | `approved-sha` | empty | Manual dispatch: current lowercase 40-character head SHA; comment approval comes from the command |
 | `file` | all eligible | Exact changed instruction path; quote spaces in comment commands |
@@ -49,7 +50,47 @@ publisher also suppresses stale heads and older run/attempt results.
 Pass the same request/trial/trust inputs to prepare and run: execution checks the
 request again. A moved head or base invalidates the frozen selection before
 paid calls. Each matrix entry is bound to the repository, PR, head/base,
-merge-base, target, trial count, workflow run ID and attempt.
+merge-base, core revision, target, trial count, workflow run ID and attempt.
+
+### Testing a different core revision
+
+Set `core-ref` on the **prepare** step to use a reviewed core commit instead of
+the Action release's default pin. For example:
+
+```yaml
+with:
+  mode: prepare
+  core-ref: a5dacb04b26b6562cff6759004251888f7250ef5
+```
+
+Keep the rest of the caller workflow unchanged. Prepare freezes the revision
+in each matrix entry as `core_revision`. Run and publish inherit it from
+`selection`; do not resolve a branch again in later jobs. If you also supply
+`core-ref` in run or publish, it must match the prepared revision.
+
+Only a full lowercase 40-character commit SHA is accepted. Branches, tags,
+abbreviations and repository overrides are rejected. Run fetches only from
+`spacedock-dev/behavior-diff`, checks out that exact commit and verifies `HEAD`.
+An unavailable commit fails execution; there is no fallback to the release pin.
+The result record retains the selection, and the comment names the full selected
+core SHA even when no report was produced. Artifact evidence from a different
+core revision is rejected.
+
+Use the same Action version in all three jobs. Selection schema 2 includes
+the core revision; older selections are rejected rather than assigned a pin.
+Leaving `core-ref` empty in prepare keeps the default below.
+
+**A core override selects executable code, not just instruction text.** Review
+the exact commit before allowing it access to model credentials. A same-repository
+PR or an approval of the comparison's head does not by itself approve a different
+core revision. Protect the caller workflow and execution environment; do not
+automatically use arbitrary PR-head code with secrets.
+
+The override does not change environment isolation. The runner still receives
+no GitHub environment variables or event payload, so selecting a core with CI
+header detection does not enable those headers through this Action. That needs
+a separate integration carrying only validated report metadata, not the full
+CI environment.
 
 ### Outputs and status
 
@@ -109,7 +150,7 @@ requirement; Ubuntu supplies Bash, Python 3, Git and jq.
 
 | Dependency | Pin |
 | --- | --- |
-| Behavior Diff core | v0.4.6, `5b325ed40062bb819c574e4172da04f53b53b953` |
+| Behavior Diff core (default) | v0.4.6, `5b325ed40062bb819c574e4172da04f53b53b953` |
 | Claude Code | `@anthropic-ai/claude-code@2.1.296` |
 | upload-artifact | v7.0.2, `cf430e030ddbb5b0abf93d22962f4752f3646cd9` |
 | setup-node | v4.4.0, immutable SHA in `action.yml` |

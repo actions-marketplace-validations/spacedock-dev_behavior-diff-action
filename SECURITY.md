@@ -18,6 +18,11 @@ execution. **It is not an untrusted-PR sandbox.**
   approval of the exact current head SHA by comment or manual dispatch. A new
   push requires a new approval. Same-repository opt-in is an authorization
   policy, not proof that the repository is safe.
+- A `core-ref` override selects executable code from the core repository. Review
+  that exact SHA before exposing model credentials; comparison-head approval
+  does not separately approve the selected core. Protect this input with the
+  workflow and environment, and do not automatically trust arbitrary PR heads.
+  SHA validation and checkout verification establish identity, not safety.
 - Never use `pull_request_target` to execute PR code; the Action rejects it.
   If adding your own checkout steps, set `persist-credentials: false` and do not
   check out PR code in preparation/publication jobs.

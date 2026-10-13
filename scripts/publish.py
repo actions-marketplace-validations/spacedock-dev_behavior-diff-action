@@ -26,7 +26,7 @@ import urllib.request
 import zipfile
 import zlib
 
-from common import CORE_REVISION, NoRedirect, input_value, validate_selection
+from common import NoRedirect, input_value, validate_selection
 
 SERVER = "https://github.com"
 API = "https://api.github.com"
@@ -493,7 +493,7 @@ def _comment(selection, evidence, run_url):
         "",
         "---",
         f"<sub>Generated deterministically from this run's result record and Behavior Diff core report "
-        f"(core {_code(CORE_REVISION[:12])}); no model wrote this comment. Observed trial behavior is "
+        f"(selected core {_code(selection['core_revision'])}); no model wrote this comment. Observed trial behavior is "
         "evidence to review, not a pass/fail verdict.</sub>",
     ]
     body = "\n".join(line for index, line in enumerate(lines)

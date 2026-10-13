@@ -181,6 +181,7 @@ class ExecuteTest(unittest.TestCase):
             "GITHUB_TOKEN": GITHUB_SECRET,
             "GH_TOKEN": GITHUB_SECRET,
             "BD_GITHUB_TOKEN": GITHUB_SECRET,
+            "BD_CORE_REF": "",
             "INPUT_GITHUB-TOKEN": GITHUB_SECRET,
             "ACTIONS_RUNTIME_TOKEN": GITHUB_SECRET,
             "CLAUDE_CODE_OAUTH_TOKEN": MODEL_SECRET,
@@ -248,7 +249,8 @@ class ExecuteTest(unittest.TestCase):
         return merge_base, run_git(source, "rev-parse", "HEAD")
 
     def selection(self, merge_base, head, path, change, previous=None, trials=3):
-        return {"schema": 1, "repository": REPOSITORY, "pr": 7, "head": head, "base": merge_base,
+        return {"schema": 2, "core_revision": common.CORE_REVISION,
+                "repository": REPOSITORY, "pr": 7, "head": head, "base": merge_base,
                 "merge_base": merge_base, "path": path, "previous_path": previous or path,
                 "change": change, "trials": trials, "id": common.target_id(path),
                 "run_id": "101", "run_attempt": "1"}
@@ -268,7 +270,7 @@ class ExecuteTest(unittest.TestCase):
         with mock.patch.object(execute, "resolve_request", return_value=authorized), \
                 mock.patch.object(execute, "fetch_repository", side_effect=self.fetch), \
                 mock.patch.object(execute, "install_dependencies",
-                                  side_effect=lambda work, deadline: self.dependencies):
+                                  side_effect=lambda work, deadline, core_revision: self.dependencies):
             return execute.execute(selection, types.SimpleNamespace(token=GITHUB_SECRET),
                                    {} if options is None else options)
 
@@ -299,6 +301,15 @@ class ExecuteTest(unittest.TestCase):
         self.assertEqual(len(self.calls()), model_calls)
         self.assertEqual(self.records(), [])
         self.assertFalse((Path(outputs["scratch-directory"]) / "work").exists())
+
+    def test_changed_core_ref_fails_before_execution(self):
+        selection = self.selection("a" * 40, "b" * 40, "CLAUDE.md", "M")
+        with mock.patch.dict(os.environ, {"BD_CORE_REF": "d" * 40}):
+            with self.assertRaisesRegex(ValueError, "core-ref does not match"):
+                self.run_execute(selection)
+        self.assertEqual(self.calls(), [])
+        self.assertEqual(self.records(), [])
+        self.assertEqual(list(self.runner_temp.iterdir()), [])
 
     # ------------------------------------------------------------ staging and isolation
 

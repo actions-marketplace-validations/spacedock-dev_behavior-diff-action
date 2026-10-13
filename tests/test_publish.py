@@ -14,7 +14,7 @@ import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from common import target_id  # noqa: E402
+from common import CORE_REVISION, target_id  # noqa: E402
 import publish  # noqa: E402
 
 HEAD, BASE, MERGE_BASE = "a" * 40, "b" * 40, "c" * 40
@@ -69,7 +69,8 @@ HOSTILE = [
 
 
 def make_selection(path=PATH, change="M", previous_path=None):
-    return {"schema": 1, "repository": "octo/repo", "pr": 7, "head": HEAD, "base": BASE,
+    return {"schema": 2, "core_revision": CORE_REVISION,
+            "repository": "octo/repo", "pr": 7, "head": HEAD, "base": BASE,
             "merge_base": MERGE_BASE, "path": path, "previous_path": previous_path or path,
             "change": change, "trials": 3, "id": target_id(path), "run_id": "123", "run_attempt": "2"}
 
@@ -202,7 +203,8 @@ def marker_comment(comment_id, run, attempt, target, login=BOT, kind="Bot", pref
 class PublicationTest(unittest.TestCase):
     def setUp(self):
         environment = mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": "octo/repo", "GITHUB_RUN_ID": "123",
-                                                   "GITHUB_RUN_ATTEMPT": "2", "BD_PUBLICATION": "comment"})
+                                                   "GITHUB_RUN_ATTEMPT": "2", "BD_PUBLICATION": "comment",
+                                                   "BD_CORE_REF": ""})
         environment.start()
         self.addCleanup(environment.stop)
         self.selection = make_selection()
@@ -262,6 +264,28 @@ class SummaryTests(unittest.TestCase):
 
 
 class PublishTests(PublicationTest):
+    def test_custom_core_provenance_comes_from_frozen_selection(self):
+        self.selection["core_revision"] = "d" * 40
+        api = FakeAPI(self.selection)
+        outputs, _ = self.publish(api)
+        self.assertEqual(outputs["report-status"], "complete")
+        self.assertIn("`" + "d" * 40 + "`", api.body())
+        self.assertNotIn(CORE_REVISION, api.body())
+
+    def test_result_from_different_core_is_not_published_as_evidence(self):
+        self.selection["core_revision"] = "d" * 40
+        api = FakeAPI(self.selection)
+        record = result({**self.selection, "core_revision": CORE_REVISION})
+        outputs, _ = self.publish(api, report_archive(record))
+        self.assert_failed(api, outputs, publish.FOREIGN_RESULT)
+
+    def test_conflicting_core_input_fails_before_publication(self):
+        api = FakeAPI(self.selection)
+        with mock.patch.dict(os.environ, {"BD_CORE_REF": "d" * 40}):
+            with self.assertRaisesRegex(ValueError, "core-ref does not match"):
+                self.publish(api)
+        self.assertEqual(api.calls, [])
+
     def test_skips_without_comment_policy(self):
         for policy in ("none", "artifact"):
             with self.subTest(policy), mock.patch.dict(os.environ, {"BD_PUBLICATION": policy}):
