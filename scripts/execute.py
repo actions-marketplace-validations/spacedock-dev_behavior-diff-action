@@ -876,11 +876,17 @@ def execute(selection, api, options=None):
         status, available = collect(selection, state, work / "behavior-diff-home", report)
     finally:
         _remove_tree(work)
+    artifact_name = f"behavior-diff-{selection['run_id']}-{selection['run_attempt']}-{selection['id']}"
+    html_path = scratch / f"{artifact_name}.html"
+    if available:
+        # archive:false uses the filename as the artifact name. Keep the unique
+        # link outside the evidence directory so its ZIP allowlist stays unchanged.
+        os.link(report / "report.html", html_path)
     return {
         "status": status,
         "report-directory": str(report),
-        "artifact-name": f"behavior-diff-{selection['run_id']}-{selection['run_attempt']}-{selection['id']}",
-        "report-path": str(report / "report.html") if available else "",
+        "artifact-name": artifact_name,
+        "report-path": str(html_path) if available else "",
         "result-path": str(report / "result.json"),
         "scratch-directory": str(scratch),
     }

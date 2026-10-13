@@ -265,10 +265,12 @@ def _download(api, repository, artifact_id):
         raise ArtifactProblem(UNREADABLE) from None
 
 
-def _find_artifact(api, selection):
+def _find_artifact(api, selection, *, html_report=False):
     """Return the one live current-attempt artifact as {id, url, expires, size}."""
     repository, run_id = selection["repository"], selection["run_id"]
     name = f"behavior-diff-{run_id}-{selection['run_attempt']}-{selection['id']}"
+    if html_report:
+        name += ".html"
     path = (f"/repos/{repository}/actions/runs/{run_id}/artifacts"
             f"?name={urllib.parse.quote(name, safe='')}&per_page=100")
     matches = []
@@ -401,13 +403,20 @@ def _evidence(api, selection):
         result = _parse_result(files.get("result.json"), selection, names)
     except ArtifactProblem as problem:
         return {"status": "failed", "problem": str(problem), "artifact": artifact, "result": None,
-                "summary": None, "note": None}
+                "summary": None, "note": None, "html_artifact": None, "html_problem": None}
     if result["report_available"]:
         summary, note = summary_section(files["report.md"])
     else:
         summary, note = None, "This run attempt produced no report."
+    html_artifact, html_problem = None, None
+    if result["report_available"]:
+        try:
+            html_artifact = _find_artifact(api, selection, html_report=True)
+        except ArtifactProblem as problem:
+            html_problem = str(problem)
     return {"status": result["status"], "problem": None, "artifact": artifact, "result": result,
-            "summary": summary, "note": note}
+            "summary": summary, "note": note, "html_artifact": html_artifact,
+            "html_problem": html_problem}
 
 
 def _status_lines(evidence):
@@ -439,9 +448,16 @@ def _comment(selection, evidence, run_url):
         before = f"- **Before** — {_code(path)} at merge-base {merge_base}."
     artifact, result = evidence["artifact"], evidence["result"]
     expiry = f"; expires {artifact['expires']}" if artifact and artifact["expires"] else ""
-    if artifact and result and result["report_available"]:
-        report = (f"- **Full report** — [report artifact]({artifact['url']}) (ZIP with `report.html`; "
-                  f"requires repository access{expiry}).")
+    html_artifact = evidence["html_artifact"]
+    if html_artifact and result and result["report_available"]:
+        html_expiry = f"; expires {html_artifact['expires']}" if html_artifact["expires"] else ""
+        report = (f"- **Full report** — [HTML report]({html_artifact['url']}) (single HTML file, no ZIP; "
+                  f"requires GitHub sign-in and repository access{html_expiry}). "
+                  f"[Evidence ZIP]({artifact['url']}).")
+    elif artifact and result and result["report_available"]:
+        report = (f"- **Full report** — separate HTML artifact unavailable: {evidence['html_problem']} "
+                  f"Download the [evidence ZIP]({artifact['url']}) and open `report.html` "
+                  f"(requires repository access{expiry}).")
     elif artifact and result:
         report = (f"- **Full report** — not produced; the [run artifact]({artifact['url']}) holds only the "
                   f"result record (requires repository access{expiry}).")
@@ -525,8 +541,8 @@ def publish(selection, api):
     _verify_run(api, selection)
     evidence = _evidence(api, selection)
     outputs["report-status"] = evidence["status"]
-    if evidence["result"] and evidence["result"]["report_available"]:
-        outputs["report-url"] = evidence["artifact"]["url"]
+    if evidence["html_artifact"]:
+        outputs["report-url"] = evidence["html_artifact"]["url"]
     body = _comment(selection, evidence, run_url)
 
     pull = api.request("GET", f"/repos/{repository}/pulls/{pr}")

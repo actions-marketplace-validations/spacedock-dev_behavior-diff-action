@@ -36,17 +36,35 @@ report with the expected `partial` status when extraction was unavailable,
 and passed the Action's four-section Summary projection. No paid model calls
 were made for this check.
 
+### v0.1.1 beta: direct HTML artifacts and core v0.4.6
+
+- Core is pinned to v0.4.6, `5b325ed40062bb819c574e4172da04f53b53b953`.
+- Both uploads use `upload-artifact` v7.0.2 at
+  `cf430e030ddbb5b0abf93d22962f4752f3646cd9`. The evidence ZIP is unchanged;
+  a separate uniquely named HTML file uses `archive: false`. PR report links
+  use that artifact after validating the ZIP. Missing, expired, ambiguous or
+  wrong-target HTML artifacts cannot replace the validated evidence link.
+- 72 deterministic tests, Python compilation, Actionlint 1.7.7 and the Action
+  metadata schema check passed locally.
+- A local smoke ran the actual v0.4.6 runner, validator, extractor and renderer
+  through Action orchestration with synthetic model responses. Both trials
+  completed, extraction completed, the Summary was projected successfully,
+  and the unique HTML file matched the bundled HTML byte-for-byte. No paid
+  model calls were made.
+- Live direct upload/download and browser response behavior remain unverified.
+  During the controlled smoke, inspect the separate HTML link and verify
+  whether GitHub downloads or renders it; do not promise inline rendering.
+
 Live model authentication, GitHub artifact access and real comment upserts remain
-unverified. These require the approved live smoke below before a stable release
-or Marketplace publication.
+unverified. These require the approved live smoke below before a stable release.
 
 ## v0.1.0 beta policy
 
 The initial `v0.1.0` release is a GitHub prerelease for controlled evaluation,
-authorized before the live smoke is complete. Its README and release notes must
-disclose that limitation. Publish the exact version tag without creating a
-stable `v1` alias or claiming Marketplace availability. Passing deterministic CI
-does not replace the outstanding live checks.
+published to [Marketplace](https://github.com/marketplace/actions/behavior-diff-for-agent-instructions)
+before the live smoke is complete. Its README and release notes must disclose
+that limitation. No stable `v1` alias exists. Passing deterministic CI does
+not replace the outstanding live checks.
 
 
 ## Before a release

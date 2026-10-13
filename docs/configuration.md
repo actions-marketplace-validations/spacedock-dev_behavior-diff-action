@@ -57,12 +57,16 @@ merge-base, target, trial count, workflow run ID and attempt.
   `ready` means selected; `skipped` means an automatic PR has no eligible changes.
   An explicit request with no eligible change fails visibly.
 - Run: `status` (`complete`, `partial`, `failed`), `report-directory`,
-  `report-path`, `result-path`, `artifact-name`, and, when uploaded, `artifact-url`.
-  Report paths are local to that job. `result.json` carries separate Before/After
-  completion counts, extraction availability, runner exit and report availability.
+  `report-path`, `result-path`, `artifact-name`, and, when uploaded, `artifact-url`
+  (evidence ZIP) and `report-url` (single HTML file). Report paths are local to
+  that job. `result.json` carries separate Before/After completion counts,
+  extraction availability, runner exit and report availability.
 - Publish: `status`, `report-status`, `comment-url`, `report-url`, `run-url`.
   `published` means the comment was written, **not** that evidence was complete;
   `stale`/`superseded` mean no older result replaced a newer one.
+  `report-url` is empty if the evidence ZIP cannot be validated or the separate
+  HTML artifact is missing, expired or ambiguous. The comment retains a ZIP
+  download link when validated evidence is available.
 
 Core's `REVIEW` grade means a trial produced a final answer, not correctness;
 `BLOCKED` means broken/incomplete evidence. `complete` is execution completeness,
@@ -73,12 +77,21 @@ A publisher can post an honest missing-artifact failure if execution was killed
 before it could write results. Cancellation can prevent even that publication;
 check the workflow run status.
 
-Artifacts contain only `report.html`, `report.md`, and `result.json`. No raw
-trial trees, environment dumps or credential files are intentionally uploaded.
-Reports themselves contain source, prompts, answers and recorded evidence.
-Artifacts are ZIP downloads behind GitHub's access rules, **not durable public
-HTML hosting**. Download and open `report.html` locally. Links expire with
-artifact retention or deletion. No Pages or gists are used.
+With `publication: artifact` or `comment`, each target uploads an evidence ZIP
+containing only `report.html`, `report.md`, and `result.json` (only `result.json`
+when no report was produced). A completed HTML report is also uploaded with
+`archive: false` as `behavior-diff-<run_id>-<run_attempt>-<target_id>.html`.
+The filename is unique because direct uploads ignore the `name` input.
+The publisher discovers this artifact by its exact current-attempt name only
+after validating the evidence ZIP. An HTML upload failure does not discard the
+ZIP or prevent a summary from being published.
+
+No raw trial trees, environment dumps or credential files are intentionally
+uploaded. Reports themselves contain source, prompts, answers and recorded
+evidence. Artifact links require GitHub sign-in and repository access and
+expire with retention or deletion. Download the HTML file and open it in a
+browser; inline rendering has not been verified. No Pages or gists are used.
+Separate HTML artifacts require `v0.1.1` or later; `v0.1.0` uploads only the ZIP.
 
 The PR comment deterministically projects the core Markdown Summary; there is
 no extra summarization model call. Counts, minority behavior, unchanged results
@@ -96,9 +109,9 @@ requirement; Ubuntu supplies Bash, Python 3, Git and jq.
 
 | Dependency | Pin |
 | --- | --- |
-| Behavior Diff core | v0.4.5, `415aa72db6d3c764cdca32a642d21d1d034f2cc8` |
+| Behavior Diff core | v0.4.6, `5b325ed40062bb819c574e4172da04f53b53b953` |
 | Claude Code | `@anthropic-ai/claude-code@2.1.296` |
-| upload-artifact | v4.6.2, immutable SHA in `action.yml` |
+| upload-artifact | v7.0.2, `cf430e030ddbb5b0abf93d22962f4752f3646cd9` |
 | setup-node | v4.4.0, immutable SHA in `action.yml` |
 
 Action releases and core versions are separate. Core is fetched by immutable

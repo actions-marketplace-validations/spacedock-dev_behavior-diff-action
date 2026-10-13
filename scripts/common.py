@@ -13,7 +13,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-CORE_REVISION = "415aa72db6d3c764cdca32a642d21d1d034f2cc8"
+CORE_REVISION = "5b325ed40062bb819c574e4172da04f53b53b953"
 CLAUDE_VERSION = "2.1.296"
 
 

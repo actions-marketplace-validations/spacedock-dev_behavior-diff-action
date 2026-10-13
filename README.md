@@ -9,8 +9,8 @@ It also helps you check that simplifying instructions preserves behavior you
 want to keep. You decide what the evidence means for your PR; the Action does
 not make an automatic merge recommendation.
 
-> **Beta: [v0.1.0](https://github.com/spacedock-dev/behavior-diff-action/releases/tag/v0.1.0).**
-> The workflow example uses `@v0.1.0`. Pin its reviewed full commit SHA before
+> **Beta: [v0.1.1](https://github.com/spacedock-dev/behavior-diff-action/releases/tag/v0.1.1).**
+> The workflow example uses `@v0.1.1`. Pin its reviewed full commit SHA before
 > enabling credentials. Live validation with GitHub and a model provider is
 > still pending; use this beta for controlled evaluation.
 
@@ -54,10 +54,15 @@ With `publication: comment`, the Action creates or updates one bot-owned comment
 per instruction file. It includes the tested Before/After versions, trial
 completion counts, a summary of the evidence and a link to the full report.
 
-Download the report artifact and open `report.html` to inspect the instruction
-diff, behavior comparisons, recorded actions and final answers. GitHub stores
-the report as a ZIP download, subject to repository access rules and artifact
-retention. It does not host the HTML as a web page.
+The report link downloads a single HTML file, with no ZIP to extract. Open it
+in your browser to inspect the instruction diff, behavior comparisons, recorded
+actions and final answers. GitHub requires sign-in and repository access;
+links expire with artifact retention or deletion. Inline browser rendering
+from the link has not been verified.
+
+The Action also keeps an evidence ZIP for the PR summary and as a backup if
+the separate HTML upload fails. Direct HTML uploads are available from
+`v0.1.1`; `v0.1.0` provides ZIP reports only.
 
 Each comparison changes one instruction file while holding other repository
 content fixed. Multiple changed instruction files get separate comparisons.

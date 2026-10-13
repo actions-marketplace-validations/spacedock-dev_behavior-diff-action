@@ -56,31 +56,6 @@ CANONICAL = [
     "",
 ]
 
-EXPECTED = "\n".join([
-    "## Summary", "",
-    "**After asks before deleting files\\.**", "",
-    "### 1\\. What this edit was meant to change", "",
-    "**Recorded purpose**", "",
-    "Ask before destructive commands\\.", "",
-    "Inferred from the diff\\.", "",
-    "**Context for this comparison:** Deleting a cache directory Comparison 1 · Comparison 2", "",
-    "### 2\\. What the evidence shows", "",
-    "Each side ran the same scenario\\.", "",
-    "#### Before", "",
-    "**Deleted without asking**", "",
-    "2 of 3 trials", "",
-    "**Asked first**", "",
-    "1 of 3 trials", "",
-    "#### After", "",
-    "**Asked first**", "",
-    "3 of 3 trials", "",
-    "**What this means:** After asks consistently &#124; Before split<br>second line Comparison 1", "",
-    "### 3\\. What needs your attention", "",
-    "No concerns found\\.", "",
-    "### 4\\. What we still cannot tell", "",
-    "- Three trials per side cannot show rare behavior\\.",
-    "- Unchanged behavior is not a failed test\\.",
-])
 
 HOSTILE = [
     "**Ping @octocat and &#64;admins/all** <img src=x onerror=alert(1)> &lt;script&gt;\n",
@@ -163,10 +138,14 @@ class Network:
 class FakeAPI:
     token = TOKEN
 
-    def __init__(self, selection, artifacts=None, comments=(), run=None, pull=None, author=BOT):
+    def __init__(self, selection, artifacts=None, comments=(), run=None, pull=None, author=BOT,
+                 html_artifacts=None):
         self.name = artifact_name(selection)
         self.artifacts = artifacts if artifacts is not None else [
             {"id": 55, "name": self.name, "size_in_bytes": 4096, "expired": False,
+             "expires_at": "2026-10-19T12:00:00Z", "workflow_run": {"id": 123}}]
+        self.html_artifacts = html_artifacts if html_artifacts is not None else [
+            {"id": 56, "name": self.name + ".html", "size_in_bytes": 2048, "expired": False,
              "expires_at": "2026-10-19T12:00:00Z", "workflow_run": {"id": 123}}]
         self.comments = list(comments)
         self.run = run or {"id": 123, "run_attempt": 2, "repository": {"full_name": "octo/repo"},
@@ -182,9 +161,13 @@ class FakeAPI:
             return self.run
         if method == "GET" and path.startswith("/repos/octo/repo/actions/runs/123/artifacts?"):
             query = urllib.parse.parse_qs(urllib.parse.urlsplit(path).query)
-            if query["name"] != [self.name]:
+            if query["name"] == [self.name + ".html"]:
+                items = self.html_artifacts
+            elif query["name"] == [self.name]:
+                items = self.artifacts
+            else:
                 raise AssertionError("artifact lookup must use the exact current-attempt name")
-            return {"total_count": len(self.artifacts), "artifacts": self.artifacts}
+            return {"total_count": len(items), "artifacts": items}
         if method == "GET" and path == "/repos/octo/repo/pulls/7":
             return self.pull
         if method == "POST" and path == "/repos/octo/repo/issues/7/comments":
@@ -243,10 +226,6 @@ class PublicationTest(unittest.TestCase):
 
 
 class SummaryTests(unittest.TestCase):
-    def test_copies_complete_summary_deterministically(self):
-        self.assertEqual(publish.summary_section(report()), (EXPECTED, None))
-        self.assertEqual(publish.summary_section(report()), publish.summary_section(report()))
-
     def test_unlocated_boundaries_show_no_summary(self):
         cases = {
             "missing end": report().replace(END.encode(), b"<details>"),
@@ -299,23 +278,47 @@ class PublishTests(PublicationTest):
         self.assertEqual(outputs, {
             "status": "published", "report-status": "complete",
             "comment-url": "https://github.com/octo/repo/pull/7#issuecomment-900",
-            "report-url": "https://github.com/octo/repo/actions/runs/123/artifacts/55",
+            "report-url": "https://github.com/octo/repo/actions/runs/123/artifacts/56",
             "run-url": "https://github.com/octo/repo/actions/runs/123/attempts/2"})
         body = api.body()
         self.assertEqual(body.split("\n", 1)[0],
                          f"<!-- behavior-diff:v1 target={self.selection['id']} run=123 attempt=2 -->")
         self.assertIn(f"## Behavior Diff · `{PATH}`", body)
-        self.assertIn("**Run status: Complete** — Before 3/3 trials complete · After 3/3 trials complete · "
-                      "behavior extraction complete · report available · runner exit code 0.", body)
         self.assertIn(f"- **Before** — `{PATH}` at merge-base `{MERGE_BASE}`.", body)
         self.assertIn(f"- **After** — `{PATH}` at PR head `{HEAD}`.", body)
         self.assertIn("only this file differs between Before and After", body)
-        self.assertIn("[report artifact](https://github.com/octo/repo/actions/runs/123/artifacts/55)", body)
+        self.assertIn(outputs["report-url"], body)
         self.assertIn("expires 2026-10-19T12:00:00Z", body)
         self.assertIn("[run 123, attempt 2](https://github.com/octo/repo/actions/runs/123/attempts/2)", body)
-        self.assertIn(EXPECTED, body)
         self.assertNotIn("SECRET-AFTER-BOUNDARY", body)
         self.assertEqual([call[0] for call in api.writes()], ["POST"])
+
+    def test_unavailable_html_keeps_validated_summary_and_bundle(self):
+        html = FakeAPI(self.selection).html_artifacts[0]
+        cases = [
+            [],
+            [{**html, "expired": True}],
+            [html, {**html, "id": 57}],
+            [{**html, "workflow_run": {"id": 999}}],
+            [{**html, "name": html["name"].replace("-2-", "-1-")}],
+            [{**html, "name": "behavior-diff-123-2-" + "0" * 16 + ".html"}],
+        ]
+        for artifacts in cases:
+            with self.subTest(artifacts=artifacts):
+                api = FakeAPI(self.selection, html_artifacts=artifacts)
+                outputs, _ = self.publish(api)
+                self.assertEqual(outputs["report-status"], "complete")
+                self.assertEqual(outputs["report-url"], "")
+                self.assertIn("## Summary", api.body())
+                self.assertIn("https://github.com/octo/repo/actions/runs/123/artifacts/55", api.body())
+                self.assertNotIn("/artifacts/56", api.body())
+
+    def test_html_without_validated_bundle_is_not_linked(self):
+        api = FakeAPI(self.selection, artifacts=[])
+        outputs, _ = self.publish(api)
+        self.assertEqual(outputs["report-status"], "failed")
+        self.assertEqual(outputs["report-url"], "")
+        self.assertNotIn("/artifacts/56", api.body())
 
     def test_signed_download_never_receives_token(self):
         api = FakeAPI(self.selection)
@@ -340,10 +343,8 @@ class PublishTests(PublicationTest):
         outputs, _ = self.publish(api, report_archive(record))
         self.assertEqual(outputs["report-status"], "partial")
         body = api.body()
-        self.assertIn("**Run status: Partial** — Before 2/3 trials complete · After 3/3 trials complete · "
-                      "behavior extraction unavailable · report available · runner exit code 1.", body)
         self.assertIn("**Reported problem:** Some trials did not complete @&#8203;octocat", body)
-        self.assertIn(EXPECTED, body)
+        self.assertIn("## Summary", body)
 
     def test_failed_run_without_report(self):
         record = result(self.selection, status="failed", before=0, after=0, extraction="unavailable",

@@ -318,7 +318,10 @@ class ExecuteTest(unittest.TestCase):
         self.assertEqual(scratch.parent, self.runner_temp)
         self.assertEqual(report.parent, scratch)
         self.assertEqual(outputs["artifact-name"], f"behavior-diff-101-1-{selection['id']}")
-        self.assertEqual(outputs["report-path"], str(report / "report.html"))
+        html_path = Path(outputs["report-path"])
+        self.assertEqual(html_path.name, outputs["artifact-name"] + ".html")
+        self.assertEqual(html_path.parent, scratch)
+        self.assertEqual(html_path.read_bytes(), (report / "report.html").read_bytes())
         self.assertEqual(sorted(os.listdir(report)), ["report.html", "report.md", "result.json"])
         self.assertEqual((report / "report.html").read_text(), "<html>report</html>\n")
         for name in os.listdir(report):
@@ -663,7 +666,8 @@ class ExecuteTest(unittest.TestCase):
                                             "after": {"complete": 3, "total": 3}})
         self.assertEqual(sorted(os.listdir(outputs["report-directory"])),
                          ["report.html", "report.md", "result.json"])
-        self.assertEqual(outputs["report-path"], str(Path(outputs["report-directory"]) / "report.html"))
+        self.assertEqual(Path(outputs["report-path"]).read_bytes(),
+                         (Path(outputs["report-directory"]) / "report.html").read_bytes())
 
     def test_truncated_report_is_not_published(self):
         self.configure(mode="truncated")

@@ -76,7 +76,7 @@ outputs:
     description: Private local directory containing only publication-eligible reports and result metadata.
     value: ${{ steps.phase.outputs.report-directory }}
   report-path:
-    description: Local report.html path when available.
+    description: Local uniquely named HTML report path when available.
     value: ${{ steps.phase.outputs.report-path }}
   result-path:
     description: Local structured execution result path.
@@ -91,8 +91,8 @@ outputs:
     description: Created or updated PR comment URL.
     value: ${{ steps.phase.outputs.comment-url }}
   report-url:
-    description: Publisher-discovered report artifact URL.
-    value: ${{ steps.phase.outputs.report-url }}
+    description: Unarchived HTML artifact URL; requires GitHub access, not public HTML hosting.
+    value: ${{ steps.upload-html.outputs.artifact-url || steps.phase.outputs.report-url }}
   report-status:
     description: Publisher-observed execution completeness, separate from publication success.
     value: ${{ steps.phase.outputs.report-status }}
@@ -131,14 +131,25 @@ runs:
         BD_TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
         BD_RETENTION_DAYS: ${{ inputs.retention-days }}
       run: python3 "$BD_ACTION_PATH/scripts/main.py"
-    - name: Upload only selected report files
+    - name: Upload the validated evidence bundle
       id: upload
       if: ${{ always() && inputs.mode == 'run' && inputs.publication != 'none' && steps.phase.outputs.report-directory != '' }}
-      # actions/upload-artifact v4.6.2; ZIP artifact, not hosted HTML.
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      # actions/upload-artifact v7.0.2; keep the evidence bundle as a ZIP.
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
       with:
         name: ${{ steps.phase.outputs.artifact-name }}
         path: ${{ steps.phase.outputs.report-directory }}
+        retention-days: ${{ inputs.retention-days }}
+        if-no-files-found: error
+        include-hidden-files: false
+    - name: Upload the HTML report without an archive
+      id: upload-html
+      if: ${{ always() && inputs.mode == 'run' && inputs.publication != 'none' && steps.phase.outputs.report-path != '' }}
+      # actions/upload-artifact v7.0.2; the unique filename becomes the artifact name.
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      with:
+        path: ${{ steps.phase.outputs.report-path }}
+        archive: false
         retention-days: ${{ inputs.retention-days }}
         if-no-files-found: error
         include-hidden-files: false
