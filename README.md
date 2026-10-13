@@ -9,10 +9,14 @@ It also helps you check that simplifying instructions preserves behavior you
 want to keep. You decide what the evidence means for your PR; the Action does
 not make an automatic merge recommendation.
 
-> **Beta: [v0.1.1](https://github.com/spacedock-dev/behavior-diff-action/releases/tag/v0.1.1).**
-> The workflow example uses `@v0.1.1`. Pin its reviewed full commit SHA before
+> **Beta: [v0.1.2](https://github.com/spacedock-dev/behavior-diff-action/releases/tag/v0.1.2).**
+> The workflow example uses `@v0.1`, which advances with each `v0.1.x` release.
+> Pin a reviewed full commit SHA for a fixed version before
 > enabling credentials. Live validation with GitHub and a model provider is
 > still pending; use this beta for controlled evaluation.
+
+Use `@v0.1.2` for this exact release or `@v0.1` to receive patch releases
+automatically. The moving tag includes beta releases.
 
 ## Example: ask before deleting files
 

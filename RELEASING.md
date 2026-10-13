@@ -84,6 +84,40 @@ not replace the outstanding live checks.
 5. Commit with DCO sign-off. Publish an immutable candidate SHA only when
    authorized, then use that SHA in the test repository's three-job workflow.
 
+## Version tags and required release steps
+
+Every `v0.1.x` release, including beta prereleases, must advance the moving
+`v0.1` tag to the same reviewed commit. Exact patch tags such as `v0.1.2`
+must never move. Do not create a stable `v1` alias during the beta series.
+Use a full commit SHA when a consumer needs an immutable pin.
+
+1. Update the README's exact release link and release notes. The caller example
+   uses `@v0.1`; keep all three phases on the same ref.
+2. Commit with DCO sign-off, push and wait for that commit's CI to pass.
+3. Create and push the annotated `v0.1.x` tag at that exact commit, then create
+   the GitHub release. Keep **Set as a pre-release** checked during the beta.
+4. After the release is published, advance `v0.1` to its commit. This is required
+   even when Marketplace publication is pending. Read the remote alias's
+   current object ID and use `--force-with-lease` with that explicit value
+   (empty for a new alias), so a concurrent release cannot be overwritten:
+
+   ```sh
+   version=v0.1.2
+   git fetch origin "refs/tags/$version:refs/tags/$version"
+   commit=$(git rev-parse "$version^{commit}")
+   expected=$(git ls-remote origin refs/tags/v0.1 | cut -f1)
+   git tag -f -a v0.1 "$commit" -m "Behavior Diff Action $version"
+   git push --force-with-lease="refs/tags/v0.1:$expected" origin refs/tags/v0.1
+   git ls-remote origin "refs/tags/$version^{}" "refs/tags/v0.1^{}"
+   ```
+
+   Both dereferenced tags must report the same commit SHA. If the lease fails,
+   inspect the competing release before proceeding; never retry with blind force.
+5. Select **Publish this Action to the GitHub Marketplace** on the versioned
+   release and verify the listed version. Moving a tag or creating a release
+   through the CLI does not itself publish that version to Marketplace.
+
+
 ## Controlled Action smoke
 
 This check calls models and writes artifacts/comments. It is not part of CI.
@@ -134,10 +168,9 @@ After the live smoke and review pass, an authorized owner must:
 4. Create a signed-off release commit and version tag, then explicitly select
    **Publish this Action to the GitHub Marketplace** in the GitHub release flow.
    Suggested primary category: Testing. Validate the metadata in that flow.
-5. Update the moving `v1` major tag only to the reviewed release commit under
-   the maintainer's release policy. Prefer full SHA pins in consumer workflows.
-   Remove the README's unreleased notice and record actual smoke evidence only
-   after it exists. Do not invent a release SHA for pre-release examples.
+5. Follow the required release steps above, including advancing `v0.1` for
+   every `v0.1.x` release. Prefer full SHA pins in consumer workflows. Retain
+   the beta warning until live smoke evidence supports removing it.
 
 Official references:
 
