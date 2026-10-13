@@ -91,6 +91,11 @@ Every `v0.1.x` release, including beta prereleases, must advance the moving
 must never move. Do not create a stable `v1` alias during the beta series.
 Use a full commit SHA when a consumer needs an immutable pin.
 
+The `v0.1` tag has a persistent GitHub release titled **Behavior Diff Action
+v0.1 (rolling beta)**. Keep it as a prerelease and mutable: release immutability
+would prevent advancing its tag. Do not delete and recreate the release.
+Publish it to Marketplace once using the release editor's checkbox.
+
 1. Update the README's exact release link and release notes. The caller example
    uses `@v0.1`; keep all three phases on the same ref.
 2. Commit with DCO sign-off, push and wait for that commit's CI to pass.
@@ -113,9 +118,24 @@ Use a full commit SHA when a consumer needs an immutable pin.
 
    Both dereferenced tags must report the same commit SHA. If the lease fails,
    inspect the competing release before proceeding; never retry with blind force.
-5. Select **Publish this Action to the GitHub Marketplace** on the versioned
-   release and verify the listed version. Moving a tag or creating a release
-   through the CLI does not itself publish that version to Marketplace.
+5. Update the existing `v0.1` release notes to identify the new patch version,
+   exact commit and a link to that patch's release notes. Preserve the rolling
+   alias explanation and applicable beta warnings. Update in place with:
+
+   ```sh
+   gh release edit v0.1 --repo spacedock-dev/behavior-diff-action \
+     --title "Behavior Diff Action v0.1 (rolling beta)" \
+     --prerelease --latest=false --notes-file rolling-release-notes.md
+   ```
+
+   Prepare `rolling-release-notes.md` with the current patch's details before
+   running this command. Verify the release remains a non-draft prerelease,
+   is not immutable, and its notes match the dereferenced tag's commit.
+6. Select **Publish this Action to the GitHub Marketplace** on each exact
+   versioned release when listing it. For the rolling release, verify that
+   `v0.1` remains listed after updating its tag and notes; check its publication
+   checkbox if absent. Moving a tag or creating a release through the CLI
+   does not itself publish that release to Marketplace.
 
 
 ## Controlled Action smoke
